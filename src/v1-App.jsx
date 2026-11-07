@@ -22,7 +22,7 @@ function App() {
       } else {
         setMessage(`❌ Erreur : ${data.error}`);
       }
-    } catch (err) {
+    } catch {
       setMessage("❌ Une erreur est survenue.");
     } finally {
       setLoading(false);
