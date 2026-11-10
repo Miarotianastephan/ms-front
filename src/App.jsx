@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { ArrowDownToLine, AudioLines, Check, Clock3, Folder, Link2, Moon, Music2, Sun, TriangleAlert } from "lucide-react";
+import { ArrowDownToLine, AudioLines, Check, ClipboardPaste, Clock3, Folder, Link2, Moon, Music2, Sun, TriangleAlert } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -7,6 +7,44 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Progress } from "@/components/ui/progress";
+
+function getYoutubeUrlError(value) {
+  const trimmedValue = value.trim();
+  if (!trimmedValue) return "";
+
+  let parsedUrl;
+  try {
+    parsedUrl = new URL(trimmedValue);
+  } catch {
+    return "Ce lien ne semble pas être une URL valide. Vérifiez qu’il est complet.";
+  }
+
+  if (!["http:", "https:"].includes(parsedUrl.protocol)) {
+    return "Le lien doit commencer par https:// ou http://.";
+  }
+
+  const hostname = parsedUrl.hostname.toLowerCase();
+  const isYoutubeHost = hostname === "youtube.com" || hostname.endsWith(".youtube.com");
+  const isShortHost = hostname === "youtu.be";
+  if (!isYoutubeHost && !isShortHost) {
+    return "Ce lien ne vient pas de YouTube. Collez un lien youtube.com ou youtu.be.";
+  }
+
+  const videoIdPattern = /^[\w-]{11}$/;
+  const pathParts = parsedUrl.pathname.split("/").filter(Boolean);
+  const videoId = isShortHost
+    ? pathParts[0]
+    : ["shorts", "embed", "live"].includes(pathParts[0])
+      ? pathParts[1]
+      : parsedUrl.searchParams.get("v");
+  const isPlaylistLink = pathParts[0] === "playlist" && Boolean(parsedUrl.searchParams.get("list"));
+
+  if (!isPlaylistLink && !videoIdPattern.test(videoId || "")) {
+    return "Le lien YouTube semble incomplet. Utilisez une vidéo ou une playlist YouTube valide.";
+  }
+
+  return "";
+}
 
 function StatusBadge({ status }) {
   const variants = {
@@ -46,6 +84,8 @@ function App() {
     return savedTheme ? savedTheme === "dark" : window.matchMedia("(prefers-color-scheme: dark)").matches;
   });
   const [url, setUrl] = useState("");
+  const [urlError, setUrlError] = useState("");
+  const [pasteMessage, setPasteMessage] = useState("");
   const [isPlaylist, setIsPlaylist] = useState(false);
   const [folderName, setFolderName] = useState("");
   const [downloading, setDownloading] = useState(false);
@@ -57,7 +97,12 @@ function App() {
   }, [isDark]);
 
   const handleDownload = async () => {
-    if (!url) return;
+    const validationError = getYoutubeUrlError(url);
+    if (validationError) {
+      setUrlError(validationError);
+      return;
+    }
+    if (!url.trim()) return;
     setDownloading(true);
 
     try {
@@ -67,10 +112,34 @@ function App() {
         body: JSON.stringify({ url, isPlaylist, folderName }),
       });
       setUrl("");
+      setUrlError("");
+      setPasteMessage("");
     } catch {
       alert("Erreur lors du téléchargement.");
     } finally {
       setDownloading(false);
+    }
+  };
+
+  const handlePaste = async () => {
+    setPasteMessage("");
+    try {
+      if (!navigator.clipboard?.readText) {
+        setPasteMessage("Le collage automatique n’est pas disponible. Collez le lien avec Ctrl+V ou ⌘V.");
+        return;
+      }
+
+      const pastedText = (await navigator.clipboard.readText()).trim();
+      if (!pastedText) {
+        setPasteMessage("Le presse-papiers est vide. Copiez d’abord un lien YouTube.");
+        return;
+      }
+
+      setUrl(pastedText);
+      setUrlError(getYoutubeUrlError(pastedText));
+      setPasteMessage(getYoutubeUrlError(pastedText) ? "Le contenu collé ne ressemble pas à un lien YouTube valide." : "Lien collé depuis le presse-papiers.");
+    } catch {
+      setPasteMessage("Accès au presse-papiers refusé. Collez le lien avec Ctrl+V ou ⌘V.");
     }
   };
 
@@ -123,14 +192,24 @@ function App() {
             <div className="mb-2"><Label htmlFor="video-url" className="text-sm font-medium text-[#38443a] dark:text-[#d2dcd4]">Lien de la vidéo</Label></div>
             <div className="relative">
               <Link2 aria-hidden="true" className="pointer-events-none absolute left-4 top-1/2 size-[18px] -translate-y-1/2 text-[#929a91] dark:text-[#98a59b]" />
-              <Input id="video-url" type="url" value={url} onChange={(e) => setUrl(e.target.value)} placeholder="https://www.youtube.com/watch?v=..." className="h-12 rounded-lg border-[#e3e5df] bg-white pl-11 text-sm focus-visible:border-[#43836a] focus-visible:ring-[#43836a]/15 dark:border-[#39443c] dark:bg-[#151b17] dark:text-[#e1e8e2] dark:placeholder:text-[#758078]" />
+              <Input id="video-url" type="url" value={url} onChange={(e) => {
+                const nextUrl = e.target.value;
+                setUrl(nextUrl);
+                setUrlError(getYoutubeUrlError(nextUrl));
+                setPasteMessage("");
+              }} placeholder="https://www.youtube.com/watch?v=..." aria-invalid={Boolean(urlError)} aria-describedby={urlError ? "video-url-error" : pasteMessage ? "video-url-feedback" : undefined} className="h-12 rounded-lg border-[#e3e5df] bg-white pl-11 pr-24 text-sm focus-visible:border-[#43836a] focus-visible:ring-[#43836a]/15 aria-invalid:border-[#c75d51] aria-invalid:focus-visible:ring-[#c75d51]/20 dark:border-[#39443c] dark:bg-[#151b17] dark:text-[#e1e8e2] dark:placeholder:text-[#758078]" />
+              <Button type="button" variant="outline" size="sm" onClick={handlePaste} className="absolute right-1.5 top-1/2 h-9 -translate-y-1/2 gap-1.5 rounded-md border-[#e3e5df] bg-white px-2.5 text-xs text-[#536157] hover:bg-[#f0f5f1] dark:border-[#39443c] dark:bg-[#202922] dark:text-[#d5dfd7] dark:hover:bg-[#2a362e]">
+                <ClipboardPaste aria-hidden="true" className="size-3.5" />Coller
+              </Button>
             </div>
+            {urlError && <p id="video-url-error" role="alert" className="mt-2 text-xs text-[#ad493f] dark:text-[#efaaa3]">{urlError}</p>}
+            {!urlError && pasteMessage && <p id="video-url-feedback" role="status" className="mt-2 text-xs text-[#43836a] dark:text-[#a9d4b7]">{pasteMessage}</p>}
             <div className="mt-5 grid gap-4 sm:grid-cols-[1fr_auto] sm:items-end">
               <div>
                 <Label htmlFor="folder-name" className="mb-2 block text-sm font-medium text-[#38443a] dark:text-[#d2dcd4]">Dossier de destination <span className="font-normal text-[#929a91] dark:text-[#98a59b]">· facultatif</span></Label>
                 <div className="relative"><Folder aria-hidden="true" className="pointer-events-none absolute left-4 top-1/2 size-[17px] -translate-y-1/2 text-[#929a91] dark:text-[#98a59b]" /><Input id="folder-name" type="text" value={folderName} onChange={(e) => setFolderName(e.target.value)} placeholder="Ex. Ma sélection" className="h-12 rounded-lg border-[#e3e5df] bg-white pl-11 text-sm focus-visible:border-[#43836a] focus-visible:ring-[#43836a]/15 dark:border-[#39443c] dark:bg-[#151b17] dark:text-[#e1e8e2] dark:placeholder:text-[#758078]" /></div>
               </div>
-              <Button onClick={handleDownload} disabled={downloading || !url} className="h-12 w-full rounded-lg bg-[#28664e] px-5 text-sm font-semibold text-white hover:bg-[#20563f] sm:w-auto sm:min-w-[174px]">
+              <Button onClick={handleDownload} disabled={downloading || !url.trim() || Boolean(urlError)} className="h-12 w-full rounded-lg bg-[#28664e] px-5 text-sm font-semibold text-white hover:bg-[#20563f] sm:w-auto sm:min-w-[174px]">
                 <ArrowDownToLine aria-hidden="true" className="size-[17px]" />{downloading ? "Préparation…" : "Convertir en MP3"}
               </Button>
             </div>
