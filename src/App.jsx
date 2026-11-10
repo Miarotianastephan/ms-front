@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { ArrowDownToLine, AudioLines, Check, ClipboardPaste, Clock3, Folder, Link2, Moon, Music2, Sun, TriangleAlert } from "lucide-react";
+import { ArrowDownToLine, AudioLines, Check, ChevronDown, ClipboardPaste, Clock3, Folder, Link2, LoaderCircle, Moon, Music2, Sun, TriangleAlert } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -51,29 +51,105 @@ function StatusBadge({ status }) {
     completed: { label: "Terminé", className: "bg-[#e9f4ed] text-[#34704f] dark:bg-[#203a2c] dark:text-[#a9d4b7]", Icon: Check },
     error: { label: "Échec", className: "bg-[#fbedeb] text-[#a4463c] dark:bg-[#472b29] dark:text-[#efaaa3]", Icon: TriangleAlert },
     downloading: { label: "En cours", className: "bg-[#f4f0e4] text-[#8b6a25] dark:bg-[#3d3828] dark:text-[#e5cc8e]", Icon: Clock3 },
+    processing: { label: "Conversion", className: "bg-[#e9f0f5] text-[#496c86] dark:bg-[#283744] dark:text-[#a9cde5]", Icon: LoaderCircle },
+    queued: { label: "En attente", className: "bg-[#f0f1ed] text-[#70776f] dark:bg-[#303832] dark:text-[#bdc5bd]", Icon: Clock3 },
+    completed_with_errors: { label: "Partiel", className: "bg-[#f4f0e4] text-[#8b6a25] dark:bg-[#3d3828] dark:text-[#e5cc8e]", Icon: TriangleAlert },
   };
   const item = variants[status] || { label: "En attente", className: "bg-[#f0f1ed] text-[#70776f] dark:bg-[#303832] dark:text-[#bdc5bd]", Icon: Clock3 };
   const { Icon } = item;
 
   return (
     <Badge variant="secondary" className={`h-auto shrink-0 gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium ${item.className}`}>
-      <Icon aria-hidden="true" className="size-3.5" />{item.label}
+      <Icon aria-hidden="true" className={`size-3.5 ${status === "processing" ? "animate-spin" : ""}`} />{item.label}
     </Badge>
   );
 }
 
-function DownloadItem({ download }) {
+function formatBytes(value) {
+  if (!Number.isFinite(value) || value <= 0) return null;
+  const units = ["o", "Ko", "Mo", "Go"];
+  let amount = value;
+  let unitIndex = 0;
+  while (amount >= 1024 && unitIndex < units.length - 1) {
+    amount /= 1024;
+    unitIndex += 1;
+  }
+  return `${amount.toFixed(unitIndex === 0 ? 0 : 1)} ${units[unitIndex]}`;
+}
+
+function formatEta(seconds) {
+  if (!Number.isFinite(seconds) || seconds < 0) return null;
+  if (seconds < 60) return `${Math.round(seconds)} s`;
+  const minutes = Math.floor(seconds / 60);
+  const remainingSeconds = Math.round(seconds % 60);
+  return remainingSeconds ? `${minutes} min ${remainingSeconds} s` : `${minutes} min`;
+}
+
+function DownloadTrack({ item, folder }) {
+  const progress = Number.isFinite(item.progress) ? Math.max(0, Math.min(100, item.progress)) : null;
+  const downloaded = formatBytes(item.downloadedBytes);
+  const total = formatBytes(item.totalBytes);
+  const speed = formatBytes(item.speed);
+  const eta = formatEta(item.eta);
+
   return (
-    <li className="flex gap-3 border-b border-[#eff0ec] py-4 last:border-0 last:pb-0 first:pt-0">
+    <div className="flex gap-3 border-b border-[#eff0ec] py-4 last:border-0 last:pb-0 first:pt-0 dark:border-[#2a332d]">
       <div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-[#f0f5f1] text-[#34704f] dark:bg-[#26382d] dark:text-[#a9d4b7]"><Music2 aria-hidden="true" className="size-[18px]" /></div>
       <div className="min-w-0 flex-1">
         <div className="flex flex-wrap items-start justify-between gap-2">
-          <p className="truncate pt-0.5 text-sm font-medium text-[#283129] dark:text-[#e4ebe5]">{download.filename || download.url}</p>
-          <StatusBadge status={download.status} />
+          <div className="min-w-0 flex-1">
+            <p className="truncate pt-0.5 text-sm font-medium text-[#283129] dark:text-[#e4ebe5]">{item.title || item.filename || item.url || "Préparation du titre…"}</p>
+            {(item.index || folder) && <p className="mt-1 flex items-center gap-1.5 truncate text-xs text-[#858c84] dark:text-[#a3ada5]">
+              {item.index && <span>{item.index}{item.total ? ` / ${item.total}` : ""}</span>}
+              {item.index && folder && <span>·</span>}
+              {folder && <><Folder aria-hidden="true" className="size-3.5" />{folder}</>}
+            </p>}
+          </div>
+          <StatusBadge status={item.status} />
         </div>
-        {download.folder && <p className="mt-1 flex items-center gap-1.5 truncate text-xs text-[#858c84] dark:text-[#a3ada5]"><Folder aria-hidden="true" className="size-3.5" />{download.folder}</p>}
-        {download.status === "downloading" && <Progress value={download.progress || 0} aria-label="Progression du téléchargement" className="mt-3 h-1.5 gap-0 [&_[data-slot=progress-track]]:h-1.5 [&_[data-slot=progress-track]]:bg-[#edf0ec] [&_[data-slot=progress-indicator]]:bg-[#43836a] dark:[&_[data-slot=progress-track]]:bg-[#303832]" />}
+        {(item.status === "downloading" || item.status === "processing") && <>
+          <Progress value={item.status === "processing" ? 100 : progress ?? undefined} aria-label={`Progression de ${item.title || "ce titre"}`} className="mt-3 h-1.5 gap-0 [&_[data-slot=progress-track]]:h-1.5 [&_[data-slot=progress-track]]:bg-[#edf0ec] [&_[data-slot=progress-indicator]]:bg-[#43836a] dark:[&_[data-slot=progress-track]]:bg-[#303832]" />
+          <p className="mt-1.5 flex flex-wrap gap-x-2 text-[11px] text-[#858c84] dark:text-[#a3ada5]">
+            <span>{item.status === "processing" ? item.stage || "Conversion audio" : progress === null ? "Téléchargement en cours" : `${Math.round(progress)} %`}</span>
+            {item.status === "downloading" && downloaded && <span>{downloaded}{total ? ` / ${total}` : ""}</span>}
+            {item.status === "downloading" && speed && <span>{speed}/s</span>}
+            {item.status === "downloading" && eta && <span>Environ {eta}</span>}
+          </p>
+        </>}
+        {item.status === "error" && item.error && <p className="mt-1.5 text-xs text-[#ad493f] dark:text-[#efaaa3]">{item.error}</p>}
       </div>
+    </div>
+  );
+}
+
+function DownloadItem({ download, expanded, onToggle }) {
+  const items = download.items || [];
+  if (!download.isPlaylist && items.length <= 1) {
+    return <li><DownloadTrack item={items[0] || download} folder={download.folder} /></li>;
+  }
+
+  const total = download.playlistTotal || items.length;
+  return (
+    <li className="border-b border-[#eff0ec] py-4 last:border-0 last:pb-0 first:pt-0 dark:border-[#2a332d]">
+      <div className="flex items-start justify-between gap-3">
+        <button type="button" onClick={onToggle} aria-expanded={expanded} className="group min-w-0 flex-1 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#43836a] focus-visible:ring-offset-2 dark:focus-visible:ring-offset-[#1a211c]">
+          <span className="flex items-center gap-2">
+            <ChevronDown aria-hidden="true" className={`size-4 shrink-0 text-[#778278] transition-transform duration-200 dark:text-[#a3ada5] ${expanded ? "rotate-0" : "-rotate-90"}`} />
+            <span className="truncate text-sm font-semibold text-[#283129] group-hover:text-[#28664e] dark:text-[#e4ebe5] dark:group-hover:text-[#a9d4b7]">{download.playlistTitle || "Playlist YouTube"}</span>
+          </span>
+          <span className="mt-1 block truncate pl-6 text-xs text-[#858c84] dark:text-[#a3ada5]">{download.url}</span>
+        </button>
+        <div className="flex shrink-0 flex-col items-end gap-2">
+          <StatusBadge status={download.status} />
+          <p className="text-[11px] tabular-nums text-[#858c84] dark:text-[#a3ada5]">
+            {download.completedCount || 0} / {total || "…"} terminés
+            {download.status === "downloading" && download.playlistTotal && ` · ${download.progress || 0} %`}
+          </p>
+        </div>
+      </div>
+      {expanded && <div className="mt-2 h-72 overflow-y-auto overscroll-contain pr-2 sm:h-80">
+        {items.length > 0 ? <ul>{items.map((item) => <li key={item.id}><DownloadTrack item={item} folder={download.folder} /></li>)}</ul> : <p className="py-5 text-center text-xs text-[#858c84] dark:text-[#a3ada5]">Récupération des informations de la playlist…</p>}
+      </div>}
     </li>
   );
 }
@@ -90,6 +166,7 @@ function App() {
   const [folderName, setFolderName] = useState("");
   const [downloading, setDownloading] = useState(false);
   const [downloads, setDownloads] = useState([]);
+  const [expandedDownloads, setExpandedDownloads] = useState({});
 
   useEffect(() => {
     document.documentElement.classList.toggle("dark", isDark);
@@ -150,9 +227,31 @@ function App() {
   };
 
   useEffect(() => {
-    fetchDownloads();
-    const interval = setInterval(fetchDownloads, 2000);
-    return () => clearInterval(interval);
+    if (typeof EventSource === "undefined") {
+      fetchDownloads();
+      const interval = setInterval(fetchDownloads, 2000);
+      return () => clearInterval(interval);
+    }
+
+    // EventSource reconnects automatically; each reconnect receives a fresh server snapshot.
+    const events = new EventSource("http://localhost:4000/downloads/events");
+    events.addEventListener("snapshot", (event) => {
+      setDownloads(JSON.parse(event.data).downloads || []);
+    });
+    events.addEventListener("created", (event) => {
+      const { download } = JSON.parse(event.data);
+      setDownloads((current) => current.some((item) => item.id === download.id) ? current : [download, ...current]);
+      if (download.isPlaylist) setExpandedDownloads((current) => ({ ...current, [download.id]: true }));
+    });
+    events.addEventListener("update", (event) => {
+      const { download } = JSON.parse(event.data);
+      setDownloads((current) => {
+        const exists = current.some((item) => item.id === download.id);
+        return exists ? current.map((item) => item.id === download.id ? download : item) : [download, ...current];
+      });
+    });
+
+    return () => events.close();
   }, []);
 
   return (
@@ -225,7 +324,12 @@ function App() {
               <Badge variant="secondary" className="rounded-full bg-[#edf0eb] px-2.5 py-1 text-xs font-medium tabular-nums text-[#637064] dark:bg-[#29332c] dark:text-[#c1ccc3]">{downloads.length}</Badge>
             </div>
             <Card className="gap-0 rounded-2xl border border-[#e8e9e4] bg-white px-5 py-4 shadow-[0_8px_30px_-24px_rgba(35,48,39,0.24)] transition-colors duration-300 dark:border-[#2c362f] dark:bg-[#1a211c] sm:px-6">
-              {downloads.length > 0 ? <ul>{downloads.map((download) => <DownloadItem key={download.id} download={download} />)}</ul> : (
+              {downloads.length > 0 ? <ul>{downloads.map((download) => <DownloadItem
+                key={download.id}
+                download={download}
+                expanded={expandedDownloads[download.id] ?? download.status === "downloading"}
+                onToggle={() => setExpandedDownloads((current) => ({ ...current, [download.id]: !(current[download.id] ?? download.status === "downloading") }))}
+              />)}</ul> : (
                 <div className="flex flex-col items-center px-4 py-9 text-center">
                   <span className="mb-3 flex size-11 items-center justify-center rounded-full bg-[#f1f4ef] text-[#71907a] dark:bg-[#27342b] dark:text-[#a9c4af]"><AudioLines aria-hidden="true" className="size-5" /></span>
                   <p className="text-sm font-medium text-[#515d53] dark:text-[#c6d1c8]">Rien ici pour le moment</p>
