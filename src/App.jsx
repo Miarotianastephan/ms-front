@@ -162,6 +162,7 @@ function DownloadItem({ download, expanded, onToggle, onShare, sharingItemId, pr
 
   const total = download.playlistTotal || items.length;
   const hasCompletedTracks = items.some((item) => item.status === "completed" && item.filename && !item.fileExpired);
+  const canDownloadArchive = (download.isPlaylist || total > 1) && hasCompletedTracks;
   return (
     <li className="border-b border-[#eff0ec] py-4 last:border-0 last:pb-0 first:pt-0 dark:border-[#2a332d]">
       <div className="flex items-start justify-between gap-3">
@@ -178,7 +179,7 @@ function DownloadItem({ download, expanded, onToggle, onShare, sharingItemId, pr
             {download.completedCount || 0} / {total || "…"} terminés
             {download.status === "downloading" && download.playlistTotal && ` · ${download.progress || 0} %`}
           </p>
-          {hasCompletedTracks && ["completed", "completed_with_errors"].includes(download.status) && <a href={`${API_BASE_URL}/downloads/${encodeURIComponent(download.id)}/archive`} className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-[#dce3dc] bg-white px-2.5 text-xs font-medium text-[#435449] transition-colors hover:bg-[#f0f5f1] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#43836a] dark:border-[#39443c] dark:bg-[#202922] dark:text-[#d5dfd7] dark:hover:bg-[#2a362e]">
+          {canDownloadArchive && ["completed", "completed_with_errors"].includes(download.status) && <a href={`${API_BASE_URL}/downloads/${encodeURIComponent(download.id)}/archive`} className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-[#dce3dc] bg-white px-2.5 text-xs font-medium text-[#435449] transition-colors hover:bg-[#f0f5f1] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#43836a] dark:border-[#39443c] dark:bg-[#202922] dark:text-[#d5dfd7] dark:hover:bg-[#2a362e]">
             <Archive aria-hidden="true" className="size-3.5" />Télécharger en ZIP
           </a>}
         </div>
