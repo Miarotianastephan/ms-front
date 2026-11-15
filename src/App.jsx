@@ -8,7 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Progress } from "@/components/ui/progress";
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:4000";
+const API_BASE_URL = import.meta.env.BACK_API_URL || "http://localhost:4000";
 
 function supportsFileSharing() {
   if (typeof navigator === "undefined" || !navigator.canShare || !navigator.share || typeof File === "undefined") return false;
